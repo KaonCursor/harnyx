@@ -1,0 +1,1081 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Động cơ Diesel 4 kỳ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: full-bleed 3D workshop view with an instrument panel docked on the right (stacked below on phones). */
+:root {
+  --bg: #0f1418;
+  --bg-2: #18212a;
+  --panel: #151c22;
+  --line: #2a3640;
+  --fg: #dfe6ea;
+  --muted: #8a9aa6;
+  --accent: #f2a03d;        /* diesel flame amber */
+  --intake: #4ea3ff;
+  --compress: #a08cff;
+  --power: #ff7a33;
+  --exhaust: #9aa5af;
+  --inject: #ffd84a;
+  --f-display: "Saira Condensed", "Arial Narrow", sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.45 var(--f-body);
+  overflow: hidden;
+}
+#app {
+  height: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+}
+#view {
+  position: relative;
+  min-width: 0;
+  background: radial-gradient(120% 90% at 40% 35%, var(--bg-2), var(--bg) 70%);
+  overflow: hidden;
+}
+#view canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+#tip {
+  position: absolute; pointer-events: none;
+  background: rgba(10, 14, 18, .88); border: 1px solid var(--line);
+  color: var(--fg); padding: 4px 8px; border-radius: 4px;
+  font-size: 12.5px; white-space: nowrap; transform: translate(12px, 12px);
+}
+#hud {
+  position: absolute; left: 16px; top: 14px; pointer-events: none;
+  display: grid; gap: 2px;
+}
+#hud .eyebrow {
+  font: 600 11px/1 var(--f-body); letter-spacing: .14em; text-transform: uppercase; color: var(--muted);
+}
+#hud .big {
+  font: 700 46px/1 var(--f-display); color: var(--fg); font-variant-numeric: tabular-nums;
+}
+#hud .big small { font-size: 22px; color: var(--muted); margin-left: 4px; }
+#hud .sub { font: 500 13px/1.3 var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+#legend {
+  position: absolute; left: 16px; bottom: 14px; display: flex; flex-wrap: wrap; gap: 6px 14px;
+  font-size: 12px; color: var(--muted); pointer-events: none; max-width: calc(100% - 32px);
+}
+#legend span { display: inline-flex; align-items: center; gap: 6px; }
+#legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+#panel {
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  overflow-y: auto;
+  padding-block: 18px 28px;
+  padding-inline: 18px;
+  display: flex; flex-direction: column; gap: 18px;
+}
+h1 {
+  margin: 0; font: 700 28px/1.05 var(--f-display); letter-spacing: .01em; text-wrap: balance;
+}
+h1 + p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+h2 {
+  margin: 0 0 8px; font: 600 11px/1 var(--f-body); letter-spacing: .14em; text-transform: uppercase; color: var(--muted);
+}
+section { display: flex; flex-direction: column; }
+.row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ctrl { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; margin-top: 10px; }
+.ctrl label { font-size: 13px; }
+.ctrl output { font: 500 13px var(--f-mono); color: var(--accent); font-variant-numeric: tabular-nums; }
+.ctrl input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+button {
+  font: 600 13px var(--f-body); color: var(--fg); background: var(--bg-2);
+  border: 1px solid var(--line); border-radius: 6px; padding: 7px 12px; cursor: pointer;
+}
+button:hover { border-color: var(--muted); }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); color: #1b1206; border-color: var(--accent); min-width: 96px; }
+.checks { display: grid; gap: 6px; margin-top: 10px; }
+.checks label { display: flex; gap: 8px; align-items: center; font-size: 13px; cursor: pointer; }
+.checks input { accent-color: var(--accent); }
+select {
+  font: 500 13px var(--f-body); color: var(--fg); background: var(--bg-2);
+  border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px;
+}
+
+.dialwrap { display: grid; grid-template-columns: 112px 1fr; gap: 14px; align-items: center; }
+#dial { width: 112px; height: 112px; }
+.readout { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 13px; }
+.readout dt { color: var(--muted); }
+.readout dd { margin: 0; font: 500 13px var(--f-mono); font-variant-numeric: tabular-nums; text-align: right; }
+
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th { text-align: left; font-weight: 500; color: var(--muted); padding: 0 4px 6px; border-bottom: 1px solid var(--line); }
+td { padding: 5px 4px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+td.num { font: 600 15px var(--f-display); }
+.pill {
+  display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 12px; font-weight: 600; color: #0d1115;
+}
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--line); vertical-align: middle; }
+.dot.on-i { background: var(--intake); box-shadow: 0 0 6px var(--intake); }
+.dot.on-e { background: var(--power); box-shadow: 0 0 6px var(--power); }
+.dot.on-f { background: var(--inject); box-shadow: 0 0 6px var(--inject); }
+
+canvas.chart { width: 100%; display: block; border: 1px solid var(--line); border-radius: 6px; background: #10161b; }
+#timing { height: 190px; }
+#pv { height: 170px; }
+.note { font-size: 12.5px; color: var(--muted); margin: 6px 0 0; }
+.thermo { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; font: 500 13px var(--f-mono); font-variant-numeric: tabular-nums; }
+.thermo b { color: var(--fg); font-weight: 500; }
+#ignite { font-family: var(--f-body); font-weight: 600; }
+
+@media (max-width: 860px) {
+  body { overflow: auto; }
+  #app { display: block; height: auto; }
+  #view { height: 62svh; min-height: 340px; }
+  #panel { border-left: 0; border-top: 1px solid var(--line); overflow: visible; padding-inline: 16px; }
+  #hud .big { font-size: 36px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="view">
+    <div id="hud">
+      <span class="eyebrow">Góc trục khuỷu</span>
+      <span class="big"><span id="hudAngle">0.0</span><small>°</small></span>
+      <span class="sub">chu trình <span id="hudCycle">0</span>° / 720° · <span id="hudRpm">0</span> v/ph</span>
+    </div>
+    <div id="legend">
+      <span><i style="background:var(--intake)"></i>Nạp</span>
+      <span><i style="background:var(--compress)"></i>Nén</span>
+      <span><i style="background:var(--power)"></i>Cháy · sinh công</span>
+      <span><i style="background:var(--exhaust)"></i>Xả</span>
+      <span><i style="background:var(--inject)"></i>Phun nhiên liệu</span>
+    </div>
+    <div id="tip" hidden></div>
+  </div>
+
+  <aside id="panel">
+    <header>
+      <h1>Động cơ Diesel I4 · 4 kỳ</h1>
+      <p>Nén cháy, không bugi. Thứ tự nổ 1‑3‑4‑2. Tỉ số nén ≈ <span id="crText">18</span>:1.</p>
+    </header>
+
+    <section>
+      <h2>Trục khuỷu</h2>
+      <div class="dialwrap">
+        <canvas id="dial" width="224" height="224" aria-label="Đồng hồ góc trục khuỷu"></canvas>
+        <dl class="readout">
+          <dt>Góc trục khuỷu</dt><dd id="rAngle">0.0°</dd>
+          <dt>Góc chu trình</dt><dd id="rCycle">0.0°</dd>
+          <dt>Góc trục cam</dt><dd id="rCam">0.0°</dd>
+          <dt>Vòng quay</dt><dd id="rRev">0</dd>
+        </dl>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button id="play" class="primary">Tạm dừng</button>
+        <button id="back" title="Lùi 2° (phím ←)">−2°</button>
+        <button id="fwd" title="Tiến 2° (phím →)">+2°</button>
+        <button id="tdc" title="Về ĐCT cuối kỳ nén xi lanh 1">Về ĐCT nổ</button>
+      </div>
+      <div class="ctrl">
+        <label for="rpm">Tốc độ quay</label><output id="rpmOut">40 v/ph</output>
+        <input id="rpm" type="range" min="0" max="900" step="5" value="40">
+      </div>
+    </section>
+
+    <section>
+      <h2>Xem bên trong</h2>
+      <div class="ctrl">
+        <label for="explode">Phân rã (exploded view)</label><output id="explodeOut">0%</output>
+        <input id="explode" type="range" min="0" max="100" step="1" value="0">
+      </div>
+      <div class="ctrl">
+        <label for="opacity">Độ đặc vỏ máy</label><output id="opacityOut">22%</output>
+        <input id="opacity" type="range" min="0" max="100" step="1" value="22">
+      </div>
+      <div class="checks">
+        <label><input id="cut" type="checkbox" checked> Cắt đôi vỏ máy (bỏ nửa phía ống xả)</label>
+        <label><input id="gas" type="checkbox" checked> Hiện khí trong xi lanh</label>
+        <label><input id="cover" type="checkbox" checked> Hiện nắp dàn cam</label>
+      </div>
+    </section>
+
+    <section>
+      <h2>Trạng thái từng xi lanh</h2>
+      <table>
+        <thead><tr><th>XL</th><th>Kỳ</th><th>α</th><th title="Xu-páp nạp">Nạp</th><th title="Xu-páp xả">Xả</th><th title="Kim phun">Phun</th></tr></thead>
+        <tbody id="cylRows"></tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Biểu đồ phối khí · 720°</h2>
+      <canvas id="timing" class="chart" aria-label="Biểu đồ phối khí"></canvas>
+      <p class="note">Xanh: độ nâng xu-páp nạp · cam: xu-páp xả · vàng: phun. Nạp mở 16° trước ĐCT, đóng 40° sau ĐCD; xả mở 50° trước ĐCD, đóng 16° sau ĐCT; phun từ 12° trước ĐCT.</p>
+    </section>
+
+    <section>
+      <h2 style="display:flex;justify-content:space-between;align-items:center">Đồ thị p–V
+        <select id="pvCyl" aria-label="Chọn xi lanh">
+          <option value="0">Xi lanh 1</option><option value="1">Xi lanh 2</option>
+          <option value="2">Xi lanh 3</option><option value="3">Xi lanh 4</option>
+        </select>
+      </h2>
+      <canvas id="pv" class="chart" aria-label="Đồ thị áp suất thể tích"></canvas>
+      <div class="thermo">
+        <span>p <b id="pVal">1.0</b> bar</span>
+        <span>T <b id="tVal">57</b> °C</span>
+        <span id="ignite"></span>
+      </div>
+      <p class="note">Không khí bị nén đoạn nhiệt tới hơn 600 °C, vượt xa nhiệt độ tự bốc cháy của dầu diesel (≈ 250 °C). Nhiên liệu phun vào cuối kỳ nén tự cháy sau một độ trễ ngắn.</p>
+    </section>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(() => {
+'use strict';
+const D2R = Math.PI / 180;
+const mod = (a, n) => ((a % n) + n) % n;
+const clamp01 = x => Math.min(1, Math.max(0, x));
+const smooth = x => { x = clamp01(x); return x * x * (3 - 2 * x); };
+
+/* ---------------- Engine geometry (1 unit ≈ 85 mm) ---------------- */
+const R = 0.6;             // crank throw (stroke = 1.2)
+const L = 2.0;             // connecting rod length (centre to centre)
+const BORE_R = 0.5;
+const PIN_TO_CROWN = 0.45;
+const GAP = 0.07;          // crown-to-head clearance at TDC
+const HEAD_Y = R + L + PIN_TO_CROWN + GAP;   // 3.12, underside of head
+const HEAD_TOP = 3.75;
+const SPRING_LEN = 0.4;
+const BUCKET_TOP = HEAD_TOP + SPRING_LEN + 0.18; // 4.33
+const CAM_RB = 0.17, LIFT_MAX = 0.2;
+const CAM_Y = BUCKET_TOP + CAM_RB;           // 4.50
+const VALVE_DZ = 0.25;
+const CYL_Z = [1.875, 0.625, -0.625, -1.875]; // cylinder 1 at the front (timing belt side)
+const FIRING = [1, 3, 4, 2];
+// cycle offset of each cylinder: cylinder n starts its intake stroke at crank angle OFF[n]
+const OFF = [0, 540, 180, 360];
+const PIN_ANG = [0, 180, 180, 0];
+const AREA = Math.PI * BORE_R * BORE_R;
+const VS = AREA * 2 * R;
+const VC = AREA * GAP;
+const CR = (VS + VC) / VC;
+
+/* Valve & injection timing, in cycle degrees (0 = TDC at start of intake) */
+const IVO = -16, IVC = 220;   // intake: 16° BTDC → 40° ABDC
+const EVO = 490, EVC = 736;   // exhaust: 50° BBDC → 16° ATDC
+const SOI = 348, EOI = 374;   // injection: 12° BTDC → 14° ATDC
+const SOC = 356, EOC = 420;   // combustion (ignition delay 8°)
+const BURN_END = 405;         // most of the fuel has burned by here
+const IN_DUR = IVC - IVO, EX_DUR = EVC - EVO;
+
+function valveLift(alpha, open, dur) {
+  const x = mod(alpha - open, 720);
+  if (x >= dur) return 0;
+  const s = Math.sin(Math.PI * x / dur);
+  return LIFT_MAX * s * s;
+}
+const intakeLift = a => valveLift(a, IVO, IN_DUR);
+const exhaustLift = a => valveLift(a, EVO, EX_DUR);
+const injecting = a => { const x = mod(a, 720); return x >= SOI && x <= EOI; };
+function pinY(alphaDeg) {
+  const a = alphaDeg * D2R, s = R * Math.sin(a);
+  return R * Math.cos(a) + Math.sqrt(L * L - s * s);
+}
+const volume = a => VC + AREA * (R + L - pinY(a));
+
+/* Simple thermodynamic model (polytropic compression/expansion + Wiebe-like heat release) */
+const N_POLY = 1.35, P_IN = 0.95, P_EX = 1.12, T_IN = 330;
+const V_IVC = volume(IVC);
+function burnFrac(a) { if (a < SOC) return 0; const x = clamp01((a - SOC) / (BURN_END - SOC)); return 1 - Math.exp(-6.9 * Math.pow(x, 1.8)); }
+function closedP(a) { return P_IN * Math.pow(V_IVC / volume(a), N_POLY) * (1 + 2.6 * burnFrac(a)); }
+const P_EVO = closedP(EVO);
+const T_EVO = T_IN * (P_EVO * volume(EVO)) / (P_IN * V_IVC);
+function gasState(alpha) {
+  const a = mod(alpha, 720);
+  let p, T;
+  if (a < 180) { p = P_IN; T = T_IN; }
+  else if (a < IVC) { p = P_IN + (a - 180) / (IVC - 180) * 0.03; T = T_IN; }
+  else if (a < EVO) { p = closedP(a); T = T_IN * (p * volume(a)) / (P_IN * V_IVC); }
+  else if (a < 545) {
+    const k = smooth((a - EVO) / (545 - EVO));
+    p = P_EVO + (P_EX - P_EVO) * k;
+    T = T_EVO * Math.pow(p / P_EVO, (N_POLY - 1) / N_POLY);
+  } else {
+    p = P_EX;
+    const tEx = T_EVO * Math.pow(P_EX / P_EVO, (N_POLY - 1) / N_POLY);
+    T = a < 704 ? tEx : tEx + (T_IN - tEx) * smooth((a - 704) / 16);
+  }
+  return { p, T };
+}
+function strokeOf(a) {
+  a = mod(a, 720);
+  if (a < 180) return 0; if (a < 360) return 1; if (a < 540) return 2; return 3;
+}
+const STROKES = [
+  { name: 'Nạp', color: '#4ea3ff' },
+  { name: 'Nén', color: '#a08cff' },
+  { name: 'Sinh công', color: '#ff7a33' },
+  { name: 'Xả', color: '#9aa5af' },
+];
+const cycleAngle = (theta, i) => mod(theta - OFF[i], 720);
+
+/* ---------------- Three.js scene ---------------- */
+const view = document.getElementById('view');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.localClippingEnabled = true;
+view.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 200);
+camera.position.set(11.2, 5.8, 6.4);
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1.7, 0);
+controls.enableDamping = true;
+controls.minDistance = 3;
+controls.maxDistance = 40;
+
+scene.add(new THREE.HemisphereLight(0xe4ecff, 0x2b241e, 1.0));
+const sun = new THREE.DirectionalLight(0xffffff, 0.95); sun.position.set(6, 10, 7); scene.add(sun);
+const fill = new THREE.DirectionalLight(0x9fb8ff, 0.45); fill.position.set(-7, 3, -5); scene.add(fill);
+scene.add(new THREE.AmbientLight(0xffffff, 0.15));
+
+const std = (color, metalness = 0.45, roughness = 0.4, extra = {}) =>
+  new THREE.MeshStandardMaterial(Object.assign({ color, metalness, roughness }, extra));
+const M = {
+  steel: std(0xb3bcc4, 0.55, 0.32),
+  forged: std(0x8d98a3, 0.55, 0.38),
+  dark: std(0x4d565f, 0.5, 0.45),
+  piston: std(0xd4d7db, 0.4, 0.42),
+  ring: std(0x3a3f45, 0.6, 0.3),
+  bowl: std(0x6b5f55, 0.3, 0.7),
+  vIn: std(0x86a9d4, 0.5, 0.35),
+  vEx: std(0xd49a76, 0.5, 0.35),
+  bucket: std(0xa69472, 0.55, 0.35),
+  spring: std(0x6dd36d, 0.3, 0.45),
+  cam: std(0xa3acb5, 0.6, 0.3),
+  inj: std(0xd8b04a, 0.55, 0.35),
+  pump: std(0x5d7184, 0.4, 0.45),
+  pipe: std(0xc8ccd0, 0.6, 0.3),
+  belt: std(0x23262b, 0.1, 0.8),
+  pulley: std(0x414952, 0.5, 0.4),
+  mark: std(0xffffff, 0.1, 0.5, { emissive: 0x666666 }),
+  flywheel: std(0x6f777f, 0.55, 0.4),
+};
+// translucent shell material (block, head, cover, pan)
+const cutPlane = new THREE.Plane(new THREE.Vector3(0, 0, 0), 0);
+const shellMats = [];
+function shellMat(color) {
+  const m = new THREE.MeshStandardMaterial({ color, metalness: 0.2, roughness: 0.6, transparent: true, opacity: 0.22,
+    depthWrite: false, side: THREE.DoubleSide, clippingPlanes: [cutPlane] });
+  shellMats.push(m); return m;
+}
+const edgeMats = [];
+function addShell(group, geo, mat, label, pos, edges = true) {
+  const mesh = new THREE.Mesh(geo, mat);
+  if (pos) mesh.position.copy(pos);
+  mesh.renderOrder = 2;
+  mesh.userData.label = label; mesh.userData.shell = true;
+  group.add(mesh);
+  if (edges) {
+    const em = new THREE.LineBasicMaterial({ color: 0x8fa3b3, transparent: true, opacity: 0.45, clippingPlanes: [cutPlane] });
+    edgeMats.push(em);
+    const e = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 25), em);
+    e.position.copy(mesh.position); e.rotation.copy(mesh.rotation); e.renderOrder = 3;
+    group.add(e);
+  }
+  return mesh;
+}
+function mesh(geo, mat, label, parent) {
+  const m = new THREE.Mesh(geo, mat);
+  if (label) m.userData.label = label;
+  if (parent) parent.add(m);
+  return m;
+}
+// cylinder whose axis is along Z
+function zCyl(r, len, seg = 32) { const g = new THREE.CylinderGeometry(r, r, len, seg); g.rotateX(Math.PI / 2); return g; }
+
+const root = new THREE.Group(); scene.add(root);
+
+/* ---- Block, liners, crankcase ---- */
+const gBlock = new THREE.Group(); root.add(gBlock);
+const blockMat = shellMat(0x7d8a96);
+addShell(gBlock, new THREE.BoxGeometry(1.5, HEAD_Y - 0.9, 5.2), blockMat, 'Thân máy', new THREE.Vector3(0, (HEAD_Y + 0.9) / 2, 0));
+addShell(gBlock, new THREE.BoxGeometry(2.1, 1.8, 5.2), blockMat, 'Hộp trục khuỷu', new THREE.Vector3(0, 0, 0));
+const linerMat = shellMat(0xb9c6d1);
+CYL_Z.forEach((z, i) => {
+  const g = new THREE.CylinderGeometry(BORE_R + 0.02, BORE_R + 0.02, HEAD_Y - 1.0, 40, 1, true);
+  addShell(gBlock, g, linerMat, `Xi lanh ${i + 1} (ống lót)`, new THREE.Vector3(0, (HEAD_Y + 1.0) / 2, z), false);
+});
+
+/* ---- Oil pan ---- */
+const gPan = new THREE.Group(); root.add(gPan);
+addShell(gPan, new THREE.BoxGeometry(2.0, 0.7, 5.0), shellMat(0x6b7782), 'Cácte dầu', new THREE.Vector3(0, -1.25, 0));
+
+/* ---- Cylinder head with ports and manifolds ---- */
+const gHead = new THREE.Group(); root.add(gHead);
+addShell(gHead, new THREE.BoxGeometry(1.5, HEAD_TOP - HEAD_Y, 5.2), shellMat(0x8796a3), 'Nắp máy (quy lát)', new THREE.Vector3(0, (HEAD_Y + HEAD_TOP) / 2, 0));
+const portMatsIn = [], portMatsEx = [];
+CYL_Z.forEach((z, i) => {
+  [[-1, z - VALVE_DZ, true], [1, z + VALVE_DZ, false]].forEach(([side, zv, isIn]) => {
+    const curve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0, HEAD_Y + 0.08, zv), new THREE.Vector3(0, HEAD_Y + 0.28, zv),
+      new THREE.Vector3(side * 0.35, HEAD_Y + 0.38, zv), new THREE.Vector3(side * 0.75, HEAD_Y + 0.4, zv),
+    ]);
+    const mat = std(isIn ? 0x2d5b8a : 0x8a4a2d, 0.2, 0.6, { transparent: true, opacity: 0.85, emissive: 0x000000 });
+    (isIn ? portMatsIn : portMatsEx)[i] = mat;
+    mesh(new THREE.TubeGeometry(curve, 24, 0.11, 12, false), mat, isIn ? `Cửa nạp xi lanh ${i + 1}` : `Cửa xả xi lanh ${i + 1}`, gHead);
+  });
+});
+const gIntMan = new THREE.Group(); gHead.add(gIntMan);
+const gExMan = new THREE.Group(); gHead.add(gExMan);
+const manIn = std(0x3c6c9c, 0.35, 0.5), manEx = std(0x8c5a3c, 0.5, 0.5);
+mesh(zCyl(0.22, 5.4), manIn, 'Ống góp nạp', gIntMan).position.set(-1.05, HEAD_Y + 0.4, 0.1);
+mesh(zCyl(0.2, 0.8), manIn, 'Cửa vào không khí', gIntMan).position.set(-1.05, HEAD_Y + 0.4, 3.1);
+mesh(zCyl(0.2, 5.0), manEx, 'Ống góp xả', gExMan).position.set(1.05, HEAD_Y + 0.4, -0.1);
+CYL_Z.forEach(z => {
+  const r1 = mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.35, 16), manIn, 'Nhánh ống góp nạp', gIntMan);
+  r1.rotation.z = Math.PI / 2; r1.position.set(-0.9, HEAD_Y + 0.4, z - VALVE_DZ);
+  const r2 = mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.35, 16), manEx, 'Nhánh ống góp xả', gExMan);
+  r2.rotation.z = Math.PI / 2; r2.position.set(0.9, HEAD_Y + 0.4, z + VALVE_DZ);
+});
+{
+  const outlet = mesh(new THREE.CylinderGeometry(0.18, 0.18, 1.4, 20), manEx, 'Ống xả ra', gExMan);
+  outlet.position.set(1.05, HEAD_Y - 0.3, -2.55);
+}
+
+/* ---- Valve cover ---- */
+const gCover = new THREE.Group(); root.add(gCover);
+addShell(gCover, new THREE.BoxGeometry(1.4, 1.05, 5.1), shellMat(0x9aa7b3), 'Nắp dàn cam', new THREE.Vector3(0, HEAD_TOP + 0.53, 0));
+
+/* ---- Pistons, rods ---- */
+const pistons = [], rods = [];
+CYL_Z.forEach((z, i) => {
+  const g = new THREE.Group(); root.add(g);
+  const body = mesh(new THREE.CylinderGeometry(BORE_R - 0.01, BORE_R - 0.015, 0.8, 40), M.piston, `Piston xi lanh ${i + 1}`, g);
+  body.position.y = PIN_TO_CROWN - 0.4;
+  const bowl = mesh(new THREE.CylinderGeometry(0.24, 0.2, 0.012, 32), M.bowl, 'Buồng cháy trong đỉnh piston', g);
+  bowl.position.y = PIN_TO_CROWN + 0.002;
+  [0.07, 0.14, 0.22].forEach(d => {
+    const ring = mesh(new THREE.TorusGeometry(BORE_R - 0.008, 0.016, 8, 48), M.ring, 'Xéc-măng', g);
+    ring.rotation.x = Math.PI / 2; ring.position.y = PIN_TO_CROWN - d;
+  });
+  mesh(zCyl(0.1, 0.92, 20), M.steel, 'Chốt piston', g);
+  g.position.z = z;
+  pistons.push(g);
+
+  const rg = new THREE.Group(); root.add(rg);
+  mesh(zCyl(0.14, 0.3, 24), M.forged, 'Đầu nhỏ thanh truyền', rg);
+  const shank = mesh(new THREE.BoxGeometry(0.16, L - 0.36, 0.13), M.forged, `Thanh truyền xi lanh ${i + 1}`, rg);
+  shank.position.y = -L / 2;
+  const big = mesh(zCyl(0.29, 0.42, 32), M.forged, 'Đầu to thanh truyền', rg);
+  big.position.y = -L;
+  const cap = mesh(new THREE.BoxGeometry(0.7, 0.14, 0.42), M.dark, 'Nắp đầu to + bu lông', rg);
+  cap.position.y = -L - 0.14;
+  rg.position.z = z;
+  rods.push(rg);
+});
+
+/* ---- Crankshaft, flywheel, crank pulley ---- */
+const gCrankBase = new THREE.Group(); root.add(gCrankBase);
+const gCrank = new THREE.Group(); gCrankBase.add(gCrank);
+function webGeometry() {
+  const s = new THREE.Shape();
+  s.moveTo(-0.28, R);
+  s.absarc(0, R, 0.28, Math.PI, 0, true);
+  s.lineTo(0.62 * Math.cos(0.3), 0.62 * Math.sin(0.3));
+  s.absarc(0, 0, 0.62, 0.3, Math.PI - 0.3, true);
+  s.lineTo(-0.28, R);
+  const g = new THREE.ExtrudeGeometry(s, { depth: 0.12, bevelEnabled: false, curveSegments: 24 });
+  g.translate(0, 0, -0.06);
+  return g;
+}
+const webGeo = webGeometry();
+CYL_Z.forEach((z, i) => {
+  const pa = PIN_ANG[i] * D2R;
+  [-0.3, 0.3].forEach(dz => {
+    const w = mesh(webGeo, M.forged, 'Má khuỷu + đối trọng', gCrank);
+    w.rotation.z = -pa; w.position.z = z + dz;
+  });
+  const pin = mesh(zCyl(0.2, 0.5, 28), M.steel, 'Cổ biên (chốt khuỷu)', gCrank);
+  pin.position.set(R * Math.sin(pa), R * Math.cos(pa), z);
+});
+// main journals
+const mainZ = [];
+for (let k = 0; k < CYL_Z.length - 1; k++) mainZ.push([CYL_Z[k] - 0.36, CYL_Z[k + 1] + 0.36]);
+mainZ.push([CYL_Z[0] + 0.36, 3.35]);   // front snout
+mainZ.push([CYL_Z[3] - 0.36, -2.9]);  // rear flange
+mainZ.forEach(([a, b]) => {
+  const j = mesh(zCyl(0.22, Math.abs(a - b), 28), M.steel, 'Cổ trục chính', gCrank);
+  j.position.z = (a + b) / 2;
+});
+const gFly = new THREE.Group(); gCrank.add(gFly);
+mesh(zCyl(1.1, 0.18, 64), M.flywheel, 'Bánh đà', gFly);
+for (let k = 0; k < 72; k++) {
+  const a = k / 72 * Math.PI * 2;
+  const t = mesh(new THREE.BoxGeometry(0.07, 0.08, 0.16), M.dark, 'Vành răng khởi động', gFly);
+  t.position.set(Math.sin(a) * 1.12, Math.cos(a) * 1.12, 0); t.rotation.z = -a;
+}
+const flyMark = mesh(new THREE.BoxGeometry(0.06, 0.32, 0.02), M.mark, 'Dấu ĐCT xi lanh 1', gFly);
+flyMark.position.set(0, 0.85, -0.1);
+
+const PULLEY_Z = 3.1;
+function pulley(r, label, parent) {
+  const g = new THREE.Group(); parent.add(g);
+  mesh(zCyl(r, 0.2, 48), M.pulley, label, g);
+  mesh(zCyl(r * 0.35, 0.24, 24), M.dark, label, g);
+  for (let k = 0; k < 4; k++) {
+    const sp = mesh(new THREE.BoxGeometry(0.05, r * 0.6, 0.06), M.dark, label, g);
+    const a = k * Math.PI / 2;
+    sp.position.set(Math.sin(a) * r * 0.62, Math.cos(a) * r * 0.62, 0.1); sp.rotation.z = -a;
+  }
+  const mk = mesh(new THREE.BoxGeometry(0.06, 0.16, 0.02), M.mark, 'Dấu cân cam', g);
+  mk.position.set(0, r - 0.1, 0.12);
+  return g;
+}
+const crankPulley = pulley(0.35, 'Puly trục khuỷu (Z = 20)', gCrank);
+crankPulley.position.z = PULLEY_Z;
+
+/* ---- Camshaft (single overhead, half crank speed) ---- */
+const gCamBase = new THREE.Group(); root.add(gCamBase);
+gCamBase.position.y = CAM_Y;
+const gCam = new THREE.Group(); gCamBase.add(gCam);
+mesh(zCyl(0.08, 6.0, 20), M.cam, 'Trục cam (quay ½ tốc độ trục khuỷu)', gCam).position.z = 0.3;
+function lobeGeometry(centerCycleDeg, offsetDeg, dur) {
+  // lobe nose points down (toward the bucket) when the cylinder's cycle angle equals centerCycleDeg
+  const psiPeak = 180 - (centerCycleDeg + offsetDeg) / 2;
+  const pts = [];
+  for (let k = 0; k < 180; k++) {
+    const psi = k * 2;
+    let d = mod(psi - psiPeak + 180, 360) - 180;   // cam degrees from nose
+    const u = 2 * d;                                  // crank degrees from lobe centre
+    let lift = 0;
+    if (Math.abs(u) < dur / 2) { const s = Math.sin(Math.PI * (u + dur / 2) / dur); lift = LIFT_MAX * s * s; }
+    const r = CAM_RB + lift;
+    pts.push(new THREE.Vector2(r * Math.sin(psi * D2R), r * Math.cos(psi * D2R)));
+  }
+  const g = new THREE.ExtrudeGeometry(new THREE.Shape(pts), { depth: 0.16, bevelEnabled: false });
+  g.translate(0, 0, -0.08);
+  return g;
+}
+CYL_Z.forEach((z, i) => {
+  const li = mesh(lobeGeometry(IVO + IN_DUR / 2, OFF[i], IN_DUR), M.cam, `Vấu cam nạp xi lanh ${i + 1}`, gCam);
+  li.position.z = z - VALVE_DZ;
+  const le = mesh(lobeGeometry(EVO + EX_DUR / 2, OFF[i], EX_DUR), M.cam, `Vấu cam xả xi lanh ${i + 1}`, gCam);
+  le.position.z = z + VALVE_DZ;
+});
+const camPulley = pulley(0.7, 'Puly trục cam (Z = 40)', gCam);
+camPulley.position.z = PULLEY_Z;
+
+/* ---- Valves, springs, buckets ---- */
+class Helix extends THREE.Curve {
+  constructor(r, h, turns) { super(); this.r = r; this.h = h; this.turns = turns; }
+  getPoint(t, target = new THREE.Vector3()) {
+    const a = t * this.turns * Math.PI * 2;
+    return target.set(Math.cos(a) * this.r, t * this.h, Math.sin(a) * this.r);
+  }
+}
+const springGeo = new THREE.TubeGeometry(new Helix(0.1, 1, 7), 220, 0.016, 6, false);
+const gValves = new THREE.Group(); root.add(gValves);
+const valves = []; // {group, spring, intake, cyl}
+CYL_Z.forEach((z, i) => {
+  [[z - VALVE_DZ, true], [z + VALVE_DZ, false]].forEach(([zv, isIn]) => {
+    const vg = new THREE.Group(); gValves.add(vg);
+    const name = isIn ? `Xu-páp nạp xi lanh ${i + 1}` : `Xu-páp xả xi lanh ${i + 1}`;
+    const mat = isIn ? M.vIn : M.vEx;
+    const head = mesh(new THREE.CylinderGeometry(0.06, 0.16, 0.06, 32), mat, name, vg);
+    head.position.y = HEAD_Y + 0.03;
+    const stem = mesh(new THREE.CylinderGeometry(0.03, 0.03, BUCKET_TOP - 0.18 - HEAD_Y, 12), mat, name, vg);
+    stem.position.y = (HEAD_Y + BUCKET_TOP - 0.18) / 2;
+    const bucket = mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.18, 28), M.bucket, 'Con đội dạng cốc', vg);
+    bucket.position.y = BUCKET_TOP - 0.09;
+    vg.position.z = zv;
+    const sp = mesh(springGeo, M.spring, 'Lò xo xu-páp', gValves);
+    sp.position.set(0, HEAD_TOP, zv);
+    valves.push({ group: vg, spring: sp, intake: isIn, cyl: i });
+  });
+});
+
+/* ---- Injectors, spray, flame, gas ---- */
+const INJ_TILT = 22 * D2R;
+const INJ_DIR = new THREE.Vector3(Math.sin(INJ_TILT), Math.cos(INJ_TILT), 0);
+const INJ_LEN = 1.45;
+const gInj = new THREE.Group(); root.add(gInj);
+const injTops = [];
+const sprays = [], flames = [], lights = [], gases = [];
+const sprayMat = new THREE.MeshBasicMaterial({ color: 0xffe27a, transparent: true, opacity: 0.75, depthWrite: false, blending: THREE.AdditiveBlending });
+const sprayGeo = new THREE.ConeGeometry(0.035, 1, 10, 1, true); sprayGeo.translate(0, -0.5, 0); sprayGeo.rotateX(Math.PI); // tip at origin, extends +y
+const flameGeo = new THREE.SphereGeometry(1, 24, 16);
+const gasGeo = new THREE.CylinderGeometry(BORE_R - 0.012, BORE_R - 0.012, 1, 40, 1, false); gasGeo.translate(0, 0.5, 0);
+CYL_Z.forEach((z, i) => {
+  const ig = new THREE.Group(); gInj.add(ig);
+  ig.position.set(0, HEAD_Y + 0.02, z);
+  const body = mesh(new THREE.CylinderGeometry(0.075, 0.05, INJ_LEN, 18), M.inj, `Kim phun xi lanh ${i + 1}`, ig);
+  body.position.y = INJ_LEN / 2;
+  const nut = mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.25, 6), M.dark, 'Đai ốc kim phun', ig);
+  nut.position.y = INJ_LEN - 0.35;
+  ig.rotation.z = -INJ_TILT;
+  injTops.push(new THREE.Vector3(INJ_DIR.x * INJ_LEN, HEAD_Y + 0.02 + INJ_DIR.y * INJ_LEN, z));
+
+  const sg = new THREE.Group(); ig.add(sg);
+  for (let k = 0; k < 6; k++) {
+    const c = new THREE.Mesh(sprayGeo, sprayMat);
+    // spray holes: fan out and down, relative to injector axis
+    const az = k / 6 * Math.PI * 2;
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0),
+      new THREE.Vector3(Math.cos(az) * 0.85, -0.55, Math.sin(az) * 0.85).normalize());
+    c.quaternion.copy(q);
+    sg.add(c);
+  }
+  sg.visible = false;
+  sprays.push(sg);
+
+  const gas = new THREE.Mesh(gasGeo, new THREE.MeshBasicMaterial({ color: 0x4ea3ff, transparent: true, opacity: 0.25, depthWrite: false }));
+  gas.position.z = z; gas.renderOrder = 1;
+  root.add(gas); gases.push(gas);
+
+  const fl = new THREE.Mesh(flameGeo, new THREE.MeshBasicMaterial({ color: 0xffa040, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+  fl.position.z = z; fl.renderOrder = 4; root.add(fl); flames.push(fl);
+  const pl = new THREE.PointLight(0xff8a30, 0, 3.2, 2); pl.position.z = z; root.add(pl); lights.push(pl);
+});
+
+/* ---- Injection pump, high-pressure lines, belt ---- */
+const PUMP_POS = new THREE.Vector3(1.35, 2.0, 0);
+const gPump = new THREE.Group(); root.add(gPump);
+{
+  const b = mesh(new THREE.BoxGeometry(0.45, 0.9, 1.6), M.pump, 'Bơm cao áp (dẫn động ½ tốc độ)', gPump);
+  b.position.set(PUMP_POS.x, PUMP_POS.y, 2.05);
+  for (let k = 0; k < 4; k++) {
+    const o = mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.18, 10), M.pipe, 'Đầu ra bơm cao áp', gPump);
+    o.position.set(PUMP_POS.x, PUMP_POS.y + 0.54, 1.45 + k * 0.38);
+  }
+}
+const gPumpShaft = new THREE.Group(); gPump.add(gPumpShaft);
+gPumpShaft.position.set(PUMP_POS.x, PUMP_POS.y, 0);
+const pumpPulley = pulley(0.7, 'Puly bơm cao áp (Z = 40)', gPumpShaft);
+pumpPulley.position.z = PULLEY_Z;
+const fuelLines = new THREE.Group(); root.add(fuelLines);
+CYL_Z.forEach((z, i) => {
+  const start = new THREE.Vector3(PUMP_POS.x, PUMP_POS.y + 0.63, 1.45 + i * 0.38);
+  const end = injTops[i];
+  const curve = new THREE.CatmullRomCurve3([
+    start, new THREE.Vector3(start.x + 0.12, start.y + 0.9, start.z),
+    new THREE.Vector3(1.45, 4.3, (start.z + end.z) / 2), new THREE.Vector3(end.x + 0.35, end.y + 0.15, end.z), end,
+  ]);
+  mesh(new THREE.TubeGeometry(curve, 60, 0.025, 8, false), M.pipe, `Ống dầu cao áp → xi lanh ${i + 1}`, fuelLines);
+});
+const TENSIONER = new THREE.Vector3(-0.85, 2.3, PULLEY_Z);
+mesh(zCyl(0.22, 0.2, 32), M.pulley, 'Bánh căng đai', root).position.copy(TENSIONER);
+let belt = null;
+function buildBelt() {
+  if (belt) { root.remove(belt); belt.geometry.dispose(); }
+  const circles = [
+    [gCrankBase.position.x, gCrankBase.position.y, 0.37],
+    [gCamBase.position.x, gCamBase.position.y, 0.72],
+    [PUMP_POS.x + gPump.position.x, PUMP_POS.y + gPump.position.y, 0.72],
+    [TENSIONER.x, TENSIONER.y, 0.24],
+  ];
+  const pts = [];
+  circles.forEach(([cx, cy, r]) => { for (let k = 0; k < 90; k++) { const a = k / 90 * Math.PI * 2; pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]); } });
+  pts.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower = [], upper = [];
+  for (const p of pts) { while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop(); lower.push(p); }
+  for (let k = pts.length - 1; k >= 0; k--) { const p = pts[k]; while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop(); upper.push(p); }
+  const hull = lower.slice(0, -1).concat(upper.slice(0, -1));
+  const path = new THREE.CurvePath();
+  for (let k = 0; k < hull.length; k++) {
+    const a = hull[k], b = hull[(k + 1) % hull.length];
+    path.add(new THREE.LineCurve3(new THREE.Vector3(a[0], a[1], PULLEY_Z), new THREE.Vector3(b[0], b[1], PULLEY_Z)));
+  }
+  belt = mesh(new THREE.TubeGeometry(path, hull.length * 2, 0.045, 6, true), M.belt, 'Dây đai cam (truyền động 2 : 1)', root);
+}
+
+/* ---------------- State & update ---------------- */
+let theta = 0;        // engine crank angle, degrees, continuous
+let rpm = 40;
+let playing = true;
+let explode = 0;
+let lastExplode = -1;
+let pvCyl = 0;
+
+function tempColor(T, out) {
+  // 300 K deep blue → 700 K violet → 1200 K orange → 2200 K yellow-white
+  const stops = [[300, 0x3d8bff], [700, 0x9a6bff], [1200, 0xff6a1f], [2200, 0xfff1a8]];
+  let a = stops[0], b = stops[stops.length - 1];
+  for (let k = 0; k < stops.length - 1; k++) if (T >= stops[k][0] && T <= stops[k + 1][0]) { a = stops[k]; b = stops[k + 1]; break; }
+  if (T < stops[0][0]) b = a;
+  const t = b[0] === a[0] ? 0 : (T - a[0]) / (b[0] - a[0]);
+  return out.setHex(a[1]).lerp(new THREE.Color(b[1]), t);
+}
+
+function applyExplode(e) {
+  gBlock.position.set(-2.6 * e, 0, 0);
+  gPan.position.set(0, -2.8 * e, 0);
+  gHead.position.set(0, 1.3 * e, 0);
+  gIntMan.position.set(-0.9 * e, 0, 0);
+  gExMan.position.set(0.9 * e, 0, 0);
+  gCover.position.set(0, 3.9 * e, 0);
+  gCamBase.position.set(0, CAM_Y + 2.9 * e, 0);
+  gValves.position.set(0, 2.1 * e, 0);
+  gInj.position.set(1.0 * e, 2.1 * e, 0);
+  gCrankBase.position.set(0, -1.5 * e, 0);
+  gFly.position.set(0, 0, -2.95 - 1.0 * e);
+  gPump.position.set(1.6 * e, 0, 0);
+  const joined = e < 0.01;
+  fuelLines.visible = joined;
+  if (belt) belt.visible = joined;
+}
+
+const tmpColor = new THREE.Color();
+function updateEngine() {
+  const e = explode;
+  if (e !== lastExplode) { applyExplode(e); lastExplode = e; }
+  gCrank.rotation.z = -theta * D2R;
+  gCam.rotation.z = -theta / 2 * D2R;
+  gPumpShaft.rotation.z = -theta / 2 * D2R;
+
+  CYL_Z.forEach((z, i) => {
+    const a = cycleAngle(theta, i);
+    const py = pinY(a);
+    // piston
+    pistons[i].position.y = py + 0.7 * e;
+    // rod: small end at piston pin, big end at crank pin
+    const pinX = R * Math.sin(a * D2R), pinYc = R * Math.cos(a * D2R);
+    rods[i].position.set(0, py + 0.3 * e, z);
+    rods[i].rotation.z = Math.atan2(pinX, -(pinYc - py));
+    // gas column between crown and head
+    const crown = py + PIN_TO_CROWN + 0.7 * e;
+    const headBottom = HEAD_Y + 1.3 * e;
+    const h = Math.max(0.01, headBottom - crown);
+    const gas = gases[i];
+    gas.position.y = crown; gas.scale.y = h;
+    const st = gasState(a);
+    const s = strokeOf(a);
+    tempColor(st.T, tmpColor);
+    if (s === 3) tmpColor.lerp(new THREE.Color(0x7d756c), 0.55);
+    gas.material.color.copy(tmpColor);
+    gas.material.opacity = s === 2 ? 0.42 : 0.26;
+    // injection spray
+    const injOn = injecting(a);
+    sprays[i].visible = injOn;
+    if (injOn) {
+      const prog = (a - SOI) / (EOI - SOI);
+      const len = 0.12 + 0.3 * Math.min(1, prog * 3);
+      sprays[i].children.forEach(c => c.scale.set(1 + prog, len, 1 + prog));
+    }
+    // combustion flame (only after compression-ignition delay)
+    let flame = 0;
+    if (a >= SOC && a < 470) {
+      const rise = smooth((a - SOC) / 10);
+      const decay = Math.exp(-Math.max(0, a - (SOC + 14)) / 28);
+      flame = rise * decay;
+    }
+    const fl = flames[i];
+    fl.visible = flame > 0.01;
+    const midY = (crown + headBottom) / 2;
+    fl.position.set(0, midY, z);
+    const rad = Math.min(BORE_R * 0.95, 0.12 + 0.45 * flame);
+    fl.scale.set(rad, Math.max(0.03, Math.min(h * 0.5, rad)), rad);
+    fl.material.color.setHex(flame > 0.6 ? 0xffd27a : 0xff7a2a);
+    fl.material.opacity = 0.85 * flame;
+    lights[i].position.set(0, midY, z);
+    lights[i].intensity = 4.5 * flame;
+    // port glow
+    const li = intakeLift(a) / LIFT_MAX, le = exhaustLift(a) / LIFT_MAX;
+    portMatsIn[i].emissive.setHex(0x2f8cff).multiplyScalar(li * 0.9);
+    portMatsEx[i].emissive.setHex(0xff6a20).multiplyScalar(le * 0.9);
+  });
+
+  valves.forEach(v => {
+    const a = cycleAngle(theta, v.cyl);
+    const lift = v.intake ? intakeLift(a) : exhaustLift(a);
+    v.group.position.y = -lift;
+    v.spring.scale.y = SPRING_LEN - lift;
+  });
+}
+
+/* ---------------- 2D instruments ---------------- */
+const dial = document.getElementById('dial');
+const dctx = dial.getContext('2d');
+function drawDial() {
+  const w = dial.width, c = w / 2, r = w / 2 - 14;
+  dctx.clearRect(0, 0, w, w);
+  dctx.lineWidth = 3; dctx.strokeStyle = '#2a3640';
+  dctx.beginPath(); dctx.arc(c, c, r, 0, Math.PI * 2); dctx.stroke();
+  const a1 = cycleAngle(theta, 0);
+  // stroke arc of cylinder 1 (current half-turn)
+  const s = strokeOf(a1);
+  dctx.strokeStyle = STROKES[s].color; dctx.lineWidth = 8;
+  const startCrank = (s * 180) % 360;
+  const toCanvas = d => (d - 90) * D2R;
+  dctx.beginPath(); dctx.arc(c, c, r, toCanvas(startCrank), toCanvas(startCrank + 180)); dctx.stroke();
+  dctx.fillStyle = '#8a9aa6'; dctx.font = '600 20px "IBM Plex Sans", sans-serif'; dctx.textAlign = 'center'; dctx.textBaseline = 'middle';
+  dctx.fillText('ĐCT', c, 30); dctx.fillText('ĐCD', c, w - 30);
+  for (let k = 0; k < 12; k++) {
+    const a = k * 30 * D2R;
+    dctx.strokeStyle = '#5b6b78'; dctx.lineWidth = 2;
+    dctx.beginPath();
+    dctx.moveTo(c + Math.sin(a) * (r - 14), c - Math.cos(a) * (r - 14));
+    dctx.lineTo(c + Math.sin(a) * (r - 4), c - Math.cos(a) * (r - 4));
+    dctx.stroke();
+  }
+  const th = mod(theta, 360) * D2R;
+  dctx.strokeStyle = '#f2a03d'; dctx.lineWidth = 5; dctx.lineCap = 'round';
+  dctx.beginPath(); dctx.moveTo(c, c); dctx.lineTo(c + Math.sin(th) * (r - 22), c - Math.cos(th) * (r - 22)); dctx.stroke();
+  dctx.fillStyle = '#f2a03d'; dctx.beginPath(); dctx.arc(c, c, 8, 0, Math.PI * 2); dctx.fill();
+}
+
+function fitCanvas(cv) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.round(cv.clientWidth * dpr), h = Math.round(cv.clientHeight * dpr);
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  return dpr;
+}
+
+const timing = document.getElementById('timing');
+const tctx = timing.getContext('2d');
+function drawTiming() {
+  const dpr = fitCanvas(timing);
+  const W = timing.width, H = timing.height;
+  tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const w = W / dpr, h = H / dpr;
+  tctx.clearRect(0, 0, w, h);
+  const left = 34, right = 8, top = 18, bottom = 6;
+  const rowH = (h - top - bottom) / 4;
+  const xOf = d => left + (d / 720) * (w - left - right);
+  tctx.font = '500 10px "IBM Plex Mono", monospace'; tctx.textBaseline = 'middle';
+  tctx.fillStyle = '#8a9aa6'; tctx.textAlign = 'center';
+  for (let d = 0; d <= 720; d += 180) {
+    tctx.fillText(String(d), Math.min(w - 14, Math.max(left + 6, xOf(d))), 9);
+    tctx.strokeStyle = '#26323b'; tctx.lineWidth = 1;
+    tctx.beginPath(); tctx.moveTo(xOf(d), top); tctx.lineTo(xOf(d), h - bottom); tctx.stroke();
+  }
+  for (let i = 0; i < 4; i++) {
+    const y0 = top + i * rowH, yb = y0 + rowH - 3;
+    tctx.fillStyle = '#dfe6ea'; tctx.textAlign = 'left';
+    tctx.font = '600 12px "Saira Condensed", sans-serif';
+    tctx.fillText(`XL${i + 1}`, 4, y0 + rowH / 2);
+    // stroke bands, x = engine angle
+    for (let s = 0; s < 4; s++) {
+      const startE = mod(OFF[i] + s * 180, 720);
+      tctx.fillStyle = STROKES[s].color + '33';
+      const x0 = xOf(startE), x1 = xOf(startE + 180);
+      if (startE + 180 <= 720) tctx.fillRect(x0, y0 + 2, x1 - x0, rowH - 4);
+      else { tctx.fillRect(x0, y0 + 2, xOf(720) - x0, rowH - 4); tctx.fillRect(xOf(0), y0 + 2, xOf(startE + 180 - 720) - xOf(0), rowH - 4); }
+    }
+    // injection
+    const s0 = mod(OFF[i] + SOI, 720), s1 = s0 + (EOI - SOI);
+    tctx.fillStyle = '#ffd84a';
+    tctx.fillRect(xOf(s0), y0 + 3, Math.max(2, xOf(s1) - xOf(s0)), 4);
+    // valve lift curves
+    [['#7cc4ff', intakeLift], ['#ffa66b', exhaustLift]].forEach(([col, fn]) => {
+      tctx.strokeStyle = col; tctx.lineWidth = 1.6; tctx.beginPath();
+      for (let d = 0; d <= 720; d += 3) {
+        const l = fn(mod(d - OFF[i], 720)) / LIFT_MAX;
+        const x = xOf(d), y = yb - l * (rowH - 12);
+        d === 0 ? tctx.moveTo(x, y) : tctx.lineTo(x, y);
+      }
+      tctx.stroke();
+    });
+  }
+  const cx = xOf(mod(theta, 720));
+  tctx.strokeStyle = '#f2a03d'; tctx.lineWidth = 2;
+  tctx.beginPath(); tctx.moveTo(cx, top - 2); tctx.lineTo(cx, h - bottom); tctx.stroke();
+}
+
+const pv = document.getElementById('pv');
+const pctx = pv.getContext('2d');
+const PV_LOOP = [];
+for (let a = 0; a <= 720; a += 1) { const st = gasState(a); PV_LOOP.push([volume(a), st.p]); }
+const P_MAX = Math.max(...PV_LOOP.map(p => p[1]));
+function drawPV() {
+  const dpr = fitCanvas(pv);
+  const w = pv.width / dpr, h = pv.height / dpr;
+  pctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  pctx.clearRect(0, 0, w, h);
+  const l = 40, r = 10, t = 10, b = 22;
+  const xOf = V => l + (V - VC) / VS * (w - l - r);
+  const yOf = p => h - b - (p / (P_MAX * 1.08)) * (h - t - b);
+  pctx.font = '500 10px "IBM Plex Mono", monospace'; pctx.fillStyle = '#8a9aa6';
+  pctx.textAlign = 'right'; pctx.textBaseline = 'middle';
+  for (let p = 0; p <= P_MAX; p += 20) {
+    pctx.fillText(String(p), l - 6, yOf(p));
+    pctx.strokeStyle = '#1f2a32'; pctx.lineWidth = 1;
+    pctx.beginPath(); pctx.moveTo(l, yOf(p)); pctx.lineTo(w - r, yOf(p)); pctx.stroke();
+  }
+  pctx.textAlign = 'center';
+  pctx.fillText('ĐCT', xOf(VC), h - 9); pctx.fillText('ĐCD', xOf(VC + VS), h - 9);
+  pctx.fillText('V →', (l + w - r) / 2, h - 9);
+  pctx.save(); pctx.translate(10, (t + h - b) / 2); pctx.rotate(-Math.PI / 2); pctx.fillText('p (bar)', 0, 0); pctx.restore();
+  for (let k = 1; k < PV_LOOP.length; k++) {
+    const s = strokeOf(k - 1);
+    pctx.strokeStyle = STROKES[s].color; pctx.lineWidth = 1.8;
+    pctx.beginPath(); pctx.moveTo(xOf(PV_LOOP[k - 1][0]), yOf(PV_LOOP[k - 1][1])); pctx.lineTo(xOf(PV_LOOP[k][0]), yOf(PV_LOOP[k][1])); pctx.stroke();
+  }
+  const a = cycleAngle(theta, pvCyl);
+  const st = gasState(a);
+  pctx.fillStyle = '#ffffff'; pctx.strokeStyle = '#f2a03d'; pctx.lineWidth = 2;
+  pctx.beginPath(); pctx.arc(xOf(volume(a)), yOf(st.p), 5, 0, Math.PI * 2); pctx.fill(); pctx.stroke();
+}
+
+/* ---------------- Panel readouts ---------------- */
+const $ = id => document.getElementById(id);
+const cylRows = $('cylRows');
+const rowEls = [];
+for (let i = 0; i < 4; i++) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td class="num">${i + 1}</td><td><span class="pill"></span></td><td class="ang"></td>` +
+    `<td><span class="dot"></span></td><td><span class="dot"></span></td><td><span class="dot"></span></td>`;
+  cylRows.appendChild(tr);
+  const dots = tr.querySelectorAll('.dot');
+  rowEls.push({ pill: tr.querySelector('.pill'), ang: tr.querySelector('.ang'), vi: dots[0], ve: dots[1], inj: dots[2] });
+}
+$('crText').textContent = CR.toFixed(1);
+
+function updatePanel() {
+  const th = mod(theta, 360), cyc = mod(theta, 720);
+  $('hudAngle').textContent = th.toFixed(1);
+  $('hudCycle').textContent = cyc.toFixed(0);
+  $('hudRpm').textContent = playing ? rpm : 0;
+  $('rAngle').textContent = th.toFixed(1) + '°';
+  $('rCycle').textContent = cyc.toFixed(1) + '°';
+  $('rCam').textContent = mod(theta / 2, 360).toFixed(1) + '°';
+  $('rRev').textContent = Math.floor(theta / 360);
+  for (let i = 0; i < 4; i++) {
+    const a = cycleAngle(theta, i);
+    const s = strokeOf(a);
+    const el = rowEls[i];
+    let label = STROKES[s].name;
+    if (injecting(a)) label = 'Phun nhiên liệu';
+    else if (a >= SOC && a < EOC) label = 'Tự cháy';
+    el.pill.textContent = label;
+    el.pill.style.background = injecting(a) ? '#ffd84a' : STROKES[s].color;
+    el.ang.textContent = a.toFixed(0) + '°';
+    el.vi.className = 'dot' + (intakeLift(a) > 0.002 ? ' on-i' : '');
+    el.ve.className = 'dot' + (exhaustLift(a) > 0.002 ? ' on-e' : '');
+    el.inj.className = 'dot' + (injecting(a) ? ' on-f' : '');
+  }
+  const a = cycleAngle(theta, pvCyl);
+  const st = gasState(a);
+  $('pVal').textContent = st.p.toFixed(1);
+  $('tVal').textContent = (st.T - 273).toFixed(0);
+  const ig = $('ignite');
+  if (a >= SOC && a < EOC) { ig.textContent = 'Đang tự cháy'; ig.style.color = '#ff7a33'; }
+  else if (injecting(a)) { ig.textContent = 'Phun vào khí nóng'; ig.style.color = '#ffd84a'; }
+  else if (a > 300 && a < SOI) { ig.textContent = 'Khí đã vượt nhiệt độ tự cháy'; ig.style.color = '#a08cff'; }
+  else ig.textContent = '';
+}
+
+/* ---------------- Controls ---------------- */
+const playBtn = $('play');
+function setPlaying(p) { playing = p; playBtn.textContent = p ? 'Tạm dừng' : 'Chạy'; }
+playBtn.addEventListener('click', () => setPlaying(!playing));
+$('back').addEventListener('click', () => { setPlaying(false); theta = Math.max(0, theta - 2); });
+$('fwd').addEventListener('click', () => { setPlaying(false); theta += 2; });
+$('tdc').addEventListener('click', () => { setPlaying(false); theta = Math.floor(theta / 720) * 720 + 360; });
+$('rpm').addEventListener('input', e => { rpm = +e.target.value; $('rpmOut').textContent = rpm + ' v/ph'; });
+$('explode').addEventListener('input', e => {
+  const prev = explode;
+  explode = e.target.value / 100;
+  $('explodeOut').textContent = e.target.value + '%';
+  // pull the camera back as parts spread out, keeping the user's viewing direction
+  const off = camera.position.clone().sub(controls.target);
+  off.multiplyScalar((1 + 0.55 * explode) / (1 + 0.55 * prev));
+  camera.position.copy(controls.target).add(off);
+});
+function setOpacity(v) {
+  $('opacityOut').textContent = v + '%';
+  const o = v / 100;
+  shellMats.forEach(m => { m.opacity = o; m.depthWrite = o > 0.95; m.visible = o > 0.001; });
+  edgeMats.forEach(m => { m.opacity = 0.15 + 0.4 * (1 - o); });
+}
+$('opacity').addEventListener('input', e => setOpacity(+e.target.value));
+function setCut(on) { cutPlane.normal.set(on ? -1 : 0, 0, 0); cutPlane.constant = on ? 0 : 1; }
+$('cut').addEventListener('change', e => setCut(e.target.checked));
+$('gas').addEventListener('change', e => gases.forEach(g => (g.visible = e.target.checked)));
+$('cover').addEventListener('change', e => (gCover.visible = e.target.checked));
+$('pvCyl').addEventListener('change', e => (pvCyl = +e.target.value));
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.code === 'Space') { e.preventDefault(); setPlaying(!playing); }
+  if (e.code === 'ArrowRight') { setPlaying(false); theta += 2; }
+  if (e.code === 'ArrowLeft') { setPlaying(false); theta = Math.max(0, theta - 2); }
+});
+
+/* hover labels */
+const tip = $('tip');
+const ray = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let hoverPending = null;
+const pickables = [];
+scene.traverse(o => { if (o.isMesh && o.userData.label) pickables.push(o); });
+renderer.domElement.addEventListener('pointermove', e => { hoverPending = e; });
+renderer.domElement.addEventListener('pointerleave', () => { hoverPending = null; tip.hidden = true; });
+function doHover() {
+  if (!hoverPending) return;
+  const e = hoverPending; hoverPending = null;
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+  ray.setFromCamera(mouse, camera);
+  const shellPickable = shellMats[0].opacity >= 0.6 && cutPlane.constant !== 0;
+  const hits = ray.intersectObjects(pickables, false);
+  const hit = hits.find(h => {
+    let o = h.object, vis = true;
+    while (o) { if (!o.visible) { vis = false; break; } o = o.parent; }
+    return vis && (!h.object.userData.shell || shellPickable);
+  });
+  if (hit) {
+    tip.textContent = hit.object.userData.label;
+    tip.style.left = (e.clientX - rect.left) + 'px';
+    tip.style.top = (e.clientY - rect.top) + 'px';
+    tip.hidden = false;
+  } else tip.hidden = true;
+}
+
+/* ---------------- Main loop ---------------- */
+function resize() {
+  const w = view.clientWidth, h = view.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / Math.max(1, h);
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(view);
+resize();
+setOpacity(22);
+setCut(true);
+buildBelt();
+
+const clock = new THREE.Clock();
+function frame() {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  if (playing) theta += rpm / 60 * 360 * dt;
+  updateEngine();
+  controls.update();
+  renderer.render(scene, camera);
+  drawDial(); drawTiming(); drawPV(); updatePanel(); doHover();
+  requestAnimationFrame(frame);
+}
+theta = 300;  // start late in cylinder 1's compression stroke so injection happens right away
+frame();
+})();
+</script>
+</body>
+</html>
