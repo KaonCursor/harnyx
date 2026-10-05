@@ -55,13 +55,14 @@ WRITER_ROUTES = (
 
 SOFT_DEADLINE_S = 150.0
 WRITER_RESERVE_S = 75.0
-GAP_ROUND_CUTOFF_S = 60.0
+GAP_ROUND_CUTOFF_S = 80.0
+MAX_GAP_ROUNDS = 2
 MIN_BUDGET_FOR_RETRIEVAL_USD = 0.05
 
 SEARCH_RESULTS_PER_QUERY = 8
 MAX_PLANNED_QUERIES = 5
-MAX_FETCHES = 6
-MAX_GAP_FETCHES = 3
+MAX_FETCHES = 8
+MAX_GAP_FETCHES = 4
 SEARCH_TIMEOUT_S = 15.0
 FETCH_TIMEOUT_S = 20.0
 FAST_LLM_TIMEOUT_S = 30.0
@@ -70,9 +71,9 @@ WRITER_LLM_TIMEOUT_S = 70.0
 PASSAGE_TARGET_CHARS = 900
 PASSAGE_MIN_CHARS = 120
 MAX_PAGE_CHARS = 60000
-MAX_LEDGER_ENTRIES = 36
-MAX_LEDGER_CHARS = 42000
-PER_FACT_PASSAGES = 4
+MAX_LEDGER_ENTRIES = 44
+MAX_LEDGER_CHARS = 52000
+PER_FACT_PASSAGES = 5
 
 STOPWORDS = frozenset(
     "a an the and or of to in on for with by from at as is are was were be been being "
@@ -81,8 +82,17 @@ STOPWORDS = frozenset(
     "should would will may might also any all each more most other such only same so very "
     "much many some your you we our they them he she his her i me my vs versus per".split()
 )
-AUTHORITY_HINTS = (".gov", ".edu", ".int", "wikipedia.org", ".org/", "who.int", "europa.eu", "sec.gov")
-LOW_VALUE_HINTS = ("pinterest.", "facebook.com", "instagram.com", "tiktok.com", "quora.com", "/tag/", "/login")
+AUTHORITY_HINTS = (".gov", ".edu", ".int", ".mil", ".org/", "europa.eu", "sec.gov", "/press", "/annual-report")
+LOW_VALUE_HINTS = (
+    "pinterest.",
+    "facebook.com",
+    "instagram.com",
+    "tiktok.com",
+    "quora.com",
+    "reddit.com",
+    "/tag/",
+    "/login",
+)
 
 
 @dataclass
@@ -161,13 +171,18 @@ async def _research(run: Run) -> Response:
     await _fetch_best(run, MAX_FETCHES)
     ledger = _build_ledger(run, question, facts)
 
-    if run.elapsed() < GAP_ROUND_CUTOFF_S and run.remaining_budget > MIN_BUDGET_FOR_RETRIEVAL_USD:
+    targets = list(facts)
+    for _ in range(MAX_GAP_ROUNDS):
+        if run.elapsed() >= GAP_ROUND_CUTOFF_S or run.remaining_budget <= MIN_BUDGET_FOR_RETRIEVAL_USD:
+            break
         gaps = await _find_gaps(run, facts, ledger)
-        if gaps:
-            await _search(run, gaps[:3])
-            _rank_candidates(run, _query_terms(question, facts + gaps))
-            await _fetch_best(run, MAX_GAP_FETCHES)
-            ledger = _build_ledger(run, question, facts + gaps)
+        if not gaps:
+            break
+        await _search(run, gaps[:3])
+        targets = targets + gaps
+        _rank_candidates(run, _query_terms(question, targets))
+        await _fetch_best(run, MAX_GAP_FETCHES)
+        ledger = _build_ledger(run, question, targets)
 
     if not ledger:
         ledger = _build_ledger(run, question, facts)
@@ -256,12 +271,20 @@ PLAN_PROMPT = """Today is {today}. You plan web research for one question.
 Return JSON only:
 {{"facts": [...], "queries": [...], "recency": true|false}}
 
+These questions are deliberately not one-page lookups. They usually require one or more of:
+reconciling a complete list/roster with separate per-record status, date, category, or version
+records; checking a premise that may be false or stale; reconciling sources that differ by
+effective date, version, population, or jurisdiction; or computing a value from cited operands.
+
 - "facts": 2-6 atomic facts the final answer must establish. Cover every part of the
-  question (each entity, metric, date, comparison side). Name traps such as a false
-  premise or an easily confused entity as their own fact ("verify whether ...").
-- "queries": 3-5 diverse keyword web searches (not sentences) that together find
-  primary or authoritative evidence for every fact. Include entity names, years,
-  and official terms. Use the question's language plus English when helpful.
+  question (each entity, metric, date, comparison side, filter condition). Include the
+  complete pool/list the answer is drawn from, every filter or exclusion condition, and
+  any premise to verify ("verify whether ...") as separate facts.
+- "queries": 3-5 diverse keyword web searches (not sentences) that together find primary
+  publisher evidence (official sites, registries, filings, rosters, release notes) for
+  every fact: one for the complete pool itself, others for the per-record conditions.
+  Include exact entity names, years, editions, and official terms. Use the question's
+  language plus English when helpful.
 - "recency": true when the answer depends on current or recent status.
 
 Question:
@@ -475,6 +498,18 @@ def _build_ledger(run: Run, question: str, facts: list[str]) -> list[Passage]:
             seen.add(index)
             selected.append(index)
             taken += 1
+    # Lists, rosters, and tables routinely straddle passage boundaries: keep the continuation.
+    for index in list(selected):
+        following = index + 1
+        if (
+            pool[index].fetched
+            and following < len(pool)
+            and following not in seen
+            and pool[following].result_id == pool[index].result_id
+            and pool[following].start == pool[index].end
+        ):
+            seen.add(following)
+            selected.append(following)
     for index in sorted(range(len(pool)), key=lambda i: question_scores[i], reverse=True):
         if len(selected) >= MAX_LEDGER_ENTRIES or question_scores[index] <= 0.0:
             break
@@ -494,7 +529,11 @@ def _build_ledger(run: Run, question: str, facts: list[str]) -> list[Passage]:
         fingerprints.add(fingerprint)
         total += len(passage.text)
         ledger.append(passage)
-    return ledger
+    # Group by source in reading order so contiguous passages read as one excerpt.
+    source_rank: dict[str, int] = {}
+    for passage in ledger:
+        source_rank.setdefault(passage.result_id, len(source_rank))
+    return sorted(ledger, key=lambda p: (source_rank[p.result_id], p.start))
 
 
 class _Bm25:
@@ -534,7 +573,10 @@ class _Bm25:
 
 GAP_PROMPT = """Today is {today}. Decide which required facts are NOT yet supported by the evidence.
 Return JSON only: {{"missing": [{{"fact": "...", "query": "keyword web search"}}]}}
-Return an empty list when the evidence already supports every fact. At most 3 items.
+A fact is missing when the evidence lacks the complete list/pool, a per-record status/date/category
+needed to apply a filter, an operand needed for a calculation, or the authoritative source for a premise.
+Target each query at the primary publisher of the missing record. Return an empty list when the
+evidence already supports every fact. At most 3 items.
 
 Question:
 {question}
@@ -547,7 +589,7 @@ Evidence:
 
 
 async def _find_gaps(run: Run, facts: list[str], ledger: list[Passage]) -> list[str]:
-    evidence = "\n".join(f"[E{i + 1}] {_clip(p.text, 500)}" for i, p in enumerate(ledger[:24]))
+    evidence = "\n".join(f"[E{i + 1}] {_clip(p.text, 360)}" for i, p in enumerate(ledger))
     prompt = GAP_PROMPT.format(
         today=run.today,
         question=_clip(run.query.text, 4000),
@@ -579,7 +621,12 @@ WRITER_SYSTEM = """You are a meticulous research analyst. Today is {today}.
 Answer the user's question using ONLY the numbered evidence passages.
 
 Rules:
-- Answer every part of the question directly first, then give the key supporting detail.
+- Start with the complete direct answer (in the order the question asks for), then the key
+  supporting detail. Use the exact names, dates, versions, and units the sources use.
+- For list/filter questions, apply every condition to every record in the pool and say which
+  records are included and which decisive ones are excluded and why.
+- For comparisons, align the compared values side by side so each member, value, and direction
+  is directly checkable. For calculations, show the operands (cited) and the arithmetic.
 - After each factual sentence, cite the passage ids that directly contain that fact, e.g. [E3] or [E2][E7].
   Cite only passages whose text actually states the claim. Never invent ids.
 - If evidence conflicts, say so and prefer primary/official and more recent sources.
@@ -587,14 +634,17 @@ Rules:
 - If a required fact is not in the evidence, say clearly that it could not be verified;
   do not guess numbers, dates, or names. Common knowledge needs no citation.
 - Follow any format, length, or language the question requests; otherwise answer in the
-  question's language as clear, compact Markdown (short paragraphs or bullets, no title).
+  question's language as clear, self-contained Markdown (a short "## Result" section first,
+  then concise supporting detail; tables only when they lower reader effort).
 - Do not add a sources or references section and do not paste raw URLs."""
 
 WRITER_JSON_SYSTEM_SUFFIX = """
 The caller requires structured output. Return JSON only, shaped as:
 {{"answer": <value matching the JSON Schema below>, "evidence": [<ids such as "E3" that support the answer>]}}
-Do not put citation markers inside atomic fields; only use [E#] markers inside prose
-fields if the schema or question explicitly asks for citations.
+Follow every field description, ordering rule, unit, and date/version rule stated in the question
+and schema exactly. Include only the fields the schema defines. Do not put citation markers inside
+atomic fields; only use [E#] markers inside prose fields if the schema or question explicitly asks
+for citations.
 JSON Schema:
 {schema}"""
 
@@ -679,8 +729,30 @@ def _structured_response(text: str | None, ledger: list[Passage], schema: dict) 
             ref = _citation_for(ledger[index])
             if ref not in citations:
                 citations.append(ref)
-    answer = _strip_markers(answer)
+    answer = _conform_to_schema(_strip_markers(answer), schema)
     return Response(output=answer, citations=citations or None)
+
+
+def _conform_to_schema(value: object, schema: object) -> object:
+    if not isinstance(schema, dict):
+        return value
+    if isinstance(value, dict):
+        properties = schema.get("properties")
+        if not isinstance(properties, dict):
+            return value
+        conformed = {}
+        for key, item in value.items():
+            if key in properties:
+                conformed[key] = _conform_to_schema(item, properties[key])
+            elif schema.get("additionalProperties") is not False:
+                conformed[key] = item
+        for name in schema.get("required") or []:
+            if name not in conformed and isinstance(properties.get(name), dict):
+                conformed[name] = _empty_for_schema(properties[name])
+        return conformed
+    if isinstance(value, list) and isinstance(schema.get("items"), dict):
+        return [_conform_to_schema(item, schema["items"]) for item in value]
+    return value
 
 
 def _strip_markers(value: object) -> object:
